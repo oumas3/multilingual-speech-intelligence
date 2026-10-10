@@ -56,4 +56,51 @@ Give a short summary of the transcript.
 
     return response
 
+def answer_with_context(question, context):
+    prompt = f"""
+You are a helpful assistant.
+
+Use only the context below to answer the question.
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer clearly and briefly.
+"""
+
+    messages = [
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+
+    inputs = tokenizer(
+        text,
+        return_tensors="pt"
+    )
+
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=100
+    )
+
+    generated_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+
+    answer = tokenizer.decode(
+        generated_tokens,
+        skip_special_tokens=True
+    )
+
+    return answer
+
 
