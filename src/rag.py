@@ -1,15 +1,37 @@
 from sentence_transformers import SentenceTransformer, CrossEncoder, util
 from llm import answer_with_context
+from pypdf import PdfReader
 
 
-chunks = [
-    "Whisper is a speech recognition model developed by OpenAI.",
-    "WavLM is a speech representation model for audio features.",
-    "RAG retrieves relevant information before the LLM answers.",
-    "Vector databases store embeddings for semantic search."
-]
+pdf_path = "data/paper.pdf"
+
+reader = PdfReader(pdf_path)
+
+text = ""
+
+for page in reader.pages:
+    page_text = page.extract_text()
+
+    if page_text:
+        text += page_text + "\n"
 
 
+chunk_size = 500
+overlap = 100
+
+chunks = []
+
+start = 0
+
+while start < len(text):
+    end = start + chunk_size
+
+    chunk = text[start:end].strip()
+
+    if chunk:
+        chunks.append(chunk)
+
+    start = end - overlap
 
 embedding_model = SentenceTransformer(
     "all-MiniLM-L6-v2"
@@ -80,8 +102,7 @@ def rag_answer(question):
     return best_context, answer
 
 
-question = "Which model is used for speech recognition?"
-
+question = "What is cloud computing?"
 context, answer = rag_answer(question)
 
 print("\nFinal context:")
