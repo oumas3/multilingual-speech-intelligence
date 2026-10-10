@@ -11,10 +11,6 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 print("LLM loaded ✅")
-test_transcript = """
-Hello, my name is Oumeyma and I am testing my multilingual
-speech intelligence project.
-"""
 
 def analyze_transcript(transcript):
     prompt = f"""
@@ -59,7 +55,5 @@ Give a short summary of the transcript.
 
 
     return response
-answer = analyze_transcript(test_transcript)
 
-print("\nLLM response:")
-print(answer)
+
