@@ -201,8 +201,41 @@ def rag_answer(
         retrieved
     )
 
-    best_results = reranked[:2]
+   best_results = reranked[:2]
 
+# Reject questions that are not relevant to the document
+if (
+    not best_results
+    or best_results[0]["score"] < 0.25
+):
+    return {
+        "question": question,
+        "answer": (
+            "I cannot answer this question "
+            "based on the provided document."
+        ),
+        "context": "",
+        "source": knowledge_base["source"],
+        "results": best_results
+    }
+
+context = "\n\n".join(
+    item["text"]
+    for item in best_results
+)
+
+answer = answer_with_context(
+    question,
+    context
+)
+
+return {
+    "question": question,
+    "answer": answer,
+    "context": context,
+    "source": knowledge_base["source"],
+    "results": best_results
+}
     if not best_results:
         raise ValueError(
             "No relevant context was found."
