@@ -1,7 +1,7 @@
-
 from pathlib import Path
 
 from transcribe import transcribe_audio
+from audio_embeddings import extract_audio_embeddings
 from llm import analyze_transcript
 from rag import rag_answer
 
@@ -12,31 +12,41 @@ AUDIO_PATH = PROJECT_ROOT / "data" / "test_audio.mp3"
 
 def main():
     if not AUDIO_PATH.exists():
-        raise FileNotFoundError(
-            f"Audio file not found: {AUDIO_PATH}"
-        )
+        raise FileNotFoundError(f"Audio file not found: {AUDIO_PATH}")
 
-    print("\n=== MULTILINGUAL SPEECH INTELLIGENCE ===")
+    print("\n========================================")
+    print(" MULTILINGUAL SPEECH INTELLIGENCE")
+    print("========================================")
 
-    # Step 1: Convert speech into text.
-    print("\n[1/3] Transcribing audio...")
+    # 1. Whisper
+    print("\n[1/4] Transcribing audio with Whisper...")
+
     transcript = transcribe_audio(str(AUDIO_PATH))
-
-    print("\nTranscript:")
-    print(transcript)
 
     if not transcript.strip():
         raise ValueError("Whisper returned an empty transcript.")
 
-    # Step 2: Summarize the recognized speech.
-    print("\n[2/3] Analyzing transcript...")
+    print("\nTranscript:")
+    print(transcript)
+
+    # 2. WavLM
+    print("\n[2/4] Extracting WavLM audio features...")
+
+    audio_embedding = extract_audio_embeddings(str(AUDIO_PATH))
+
+    print("Audio embedding shape:")
+    print(tuple(audio_embedding.shape))
+
+    # 3. LLM speech analysis
+    print("\n[3/4] Analyzing transcript with LLM...")
+
     summary = analyze_transcript(transcript)
 
     print("\nTranscript analysis:")
     print(summary)
 
-    # Step 3: Search research PDFs using the transcript.
-    print("\n[3/3] Retrieving research evidence...")
+    # 4. RAG
+    print("\n[4/4] Research-document RAG")
 
     question = input(
         "\nAsk a question about your research PDF: "
@@ -47,6 +57,9 @@ def main():
 
     result = rag_answer(question)
 
+    print("\nQuestion:")
+    print(question)
+
     print("\nRAG answer:")
     print(result["answer"])
 
@@ -54,7 +67,9 @@ def main():
     for source in result["sources"]:
         print(f"- {source}")
 
-    print("\n=== PIPELINE FINISHED ===")
+    print("\n========================================")
+    print(" PIPELINE FINISHED SUCCESSFULLY")
+    print("========================================")
 
 
 if __name__ == "__main__":

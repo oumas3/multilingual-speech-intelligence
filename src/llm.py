@@ -58,9 +58,16 @@ Give a short summary of the transcript.
 
 def answer_with_context(question, context):
     prompt = f"""
-You are a helpful assistant.
+You are a research document assistant.
 
-Use only the context below to answer the question.
+Answer the question using only the provided context.
+
+If the context does not contain enough information
+to answer the question, say:
+
+"I cannot answer this question based on the provided document."
+
+Do not use outside knowledge.
 
 Context:
 {context}
@@ -68,7 +75,7 @@ Context:
 Question:
 {question}
 
-Answer clearly and briefly.
+Give a clear and concise answer.
 """
 
     messages = [

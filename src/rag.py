@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import re
 
@@ -8,164 +7,221 @@ from sentence_transformers import SentenceTransformer, CrossEncoder, util
 from llm import answer_with_context
 
 
-# Find the project's data folder, regardless of the terminal's location.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
+print("Loading RAG models...")
 
-# Find PDF documents in the data folder.
-pdf_files = sorted(DATA_DIR.glob("*.pdf"))
+embedding_model = SentenceTransformer(
+    "all-MiniLM-L6-v2"
+)
 
-if not pdf_files:
-    raise FileNotFoundError(
-        f"No PDF files found in {DATA_DIR}. Add a research PDF to the data folder."
-    )
+reranker = CrossEncoder(
+    "cross-encoder/ms-marco-MiniLM-L-6-v2"
+)
 
-# Extract text from every PDF.
-chunks = []
-chunk_sources = []
+print("RAG models loaded!")
 
-chunk_size = 500
-overlap = 100
 
-for pdf_path in pdf_files:
+def extract_pdf_text(pdf_path):
     reader = PdfReader(str(pdf_path))
-    pages_text = []
+
+    pages = []
 
     for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            pages_text.append(page_text)
+        text = page.extract_text()
 
-    # Clean the extracted text, not an empty string.
-    document_text = re.sub(r"\s+", " ", " ".join(pages_text)).strip()
+        if text:
+            pages.append(text)
+
+    document_text = " ".join(pages)
+
+    document_text = re.sub(
+        r"\s+",
+        " ",
+        document_text
+    ).strip()
 
     if not document_text:
-        print(f"Warning: no extractable text in {pdf_path.name}")
-        continue
+        raise ValueError(
+            "No readable text was found in this PDF."
+        )
 
-    # Split the document into overlapping chunks.
+    return document_text
+
+
+def create_chunks(
+    text,
+    chunk_size=500,
+    overlap=100
+):
+    chunks = []
+
     start = 0
 
-    while start < len(document_text):
-        end = min(start + chunk_size, len(document_text))
-        chunk = document_text[start:end].strip()
+    while start < len(text):
+        end = min(
+            start + chunk_size,
+            len(text)
+        )
+
+        # Try to finish at a sentence
+        if end < len(text):
+            sentence_end = text.rfind(
+                ".",
+                start,
+                end
+            )
+
+            if sentence_end > start:
+                end = sentence_end + 1
+
+        chunk = text[start:end].strip()
 
         if chunk:
             chunks.append(chunk)
-            chunk_sources.append(pdf_path.name)
 
-        if end == len(document_text):
+        if end >= len(text):
             break
 
-        start = end - overlap
+        start = max(
+            end - overlap,
+            start + 1
+        )
 
-if not chunks:
-    raise ValueError("No text chunks could be extracted from the PDFs.")
-
-print(f"Loaded {len(pdf_files)} PDF file(s).")
-print(f"Created {len(chunks)} text chunks.")
-
-
-# Load the models used for retrieval and reranking.
-print("Loading embedding model...")
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-
-print("Loading reranker...")
-reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-print("Creating document embeddings...")
-chunk_embeddings = embedding_model.encode(
-    chunks,
-    convert_to_tensor=True,
-    show_progress_bar=True
-)
+    return chunks
 
 
-def retrieve_chunks(question, top_k=3):
-    """Retrieve chunks with high semantic similarity to the question."""
-    if not question or not question.strip():
-        raise ValueError("The question cannot be empty.")
+def build_knowledge_base(pdf_path):
+    text = extract_pdf_text(pdf_path)
+
+    chunks = create_chunks(text)
+
+    if not chunks:
+        raise ValueError(
+            "Could not create chunks from the PDF."
+        )
+
+    embeddings = embedding_model.encode(
+        chunks,
+        convert_to_tensor=True,
+        show_progress_bar=False
+    )
+
+    return {
+        "chunks": chunks,
+        "embeddings": embeddings,
+        "source": Path(pdf_path).name
+    }
+
+
+def retrieve_chunks(
+    question,
+    knowledge_base,
+    top_k=5
+):
+    chunks = knowledge_base["chunks"]
+    embeddings = knowledge_base["embeddings"]
 
     question_embedding = embedding_model.encode(
         question,
         convert_to_tensor=True
     )
 
-    scores = util.cos_sim(question_embedding, chunk_embeddings)[0]
-    number_to_retrieve = min(top_k, len(chunks))
-    top_results = scores.topk(k=number_to_retrieve)
+    scores = util.cos_sim(
+        question_embedding,
+        embeddings
+    )[0]
 
-    results = []
+    k = min(
+        top_k,
+        len(chunks)
+    )
 
-    for score, index in zip(top_results.values, top_results.indices):
+    results = scores.topk(k=k)
+
+    retrieved = []
+
+    for score, index in zip(
+        results.values,
+        results.indices
+    ):
         i = index.item()
-        results.append({
-            "text": chunks[i],
-            "source": chunk_sources[i],
-            "score": score.item()
-        })
 
-    return results
+        retrieved.append(
+            {
+                "text": chunks[i],
+                "score": score.item()
+            }
+        )
+
+    return retrieved
 
 
-def rerank_chunks(question, retrieved_chunks):
-    """Reorder retrieved chunks by relevance to the question."""
-    if not retrieved_chunks:
+def rerank_chunks(
+    question,
+    retrieved
+):
+    if not retrieved:
         return []
 
     pairs = [
-        [question, result["text"]]
-        for result in retrieved_chunks
+        [question, item["text"]]
+        for item in retrieved
     ]
 
-    rerank_scores = reranker.predict(pairs)
+    scores = reranker.predict(pairs)
 
-    for result, score in zip(retrieved_chunks, rerank_scores):
-        result["rerank_score"] = float(score)
+    for item, score in zip(
+        retrieved,
+        scores
+    ):
+        item["rerank_score"] = float(score)
 
     return sorted(
-        retrieved_chunks,
-        key=lambda item: item["rerank_score"],
+        retrieved,
+        key=lambda x: x["rerank_score"],
         reverse=True
     )
 
 
-def rag_answer(question):
-    """Retrieve evidence from PDFs and generate a grounded answer."""
-    retrieved = retrieve_chunks(question, top_k=3)
-    reranked = rerank_chunks(question, retrieved)
+def rag_answer(
+    question,
+    knowledge_base
+):
+    if not question.strip():
+        raise ValueError(
+            "Question cannot be empty."
+        )
 
-    # Use the two highest-ranked chunks as answer context.
+    retrieved = retrieve_chunks(
+        question,
+        knowledge_base
+    )
+
+    reranked = rerank_chunks(
+        question,
+        retrieved
+    )
+
     best_results = reranked[:2]
-    context = "\n\n".join(item["text"] for item in best_results)
 
-    answer = answer_with_context(question, context)
+    if not best_results:
+        raise ValueError(
+            "No relevant context was found."
+        )
 
-    sources = list(dict.fromkeys(
-        item["source"] for item in best_results
-    ))
+    context = "\n\n".join(
+        item["text"]
+        for item in best_results
+    )
+
+    answer = answer_with_context(
+        question,
+        context
+    )
 
     return {
         "question": question,
-        "context": context,
         "answer": answer,
-        "sources": sources
+        "context": context,
+        "source": knowledge_base["source"],
+        "results": best_results
     }
-
-
-if __name__ == "__main__":
-    question = "What is cloud computing?"
-    result = rag_answer(question)
-
-    print("\nQuestion:")
-    print(result["question"])
-
-    print("\nRetrieved context:")
-    print(result["context"])
-
-    print("\nAnswer:")
-    print(result["answer"])
-
-    print("\nSources:")
-    for source in result["sources"]:
-        print(f"- {source}")
