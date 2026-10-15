@@ -30,10 +30,11 @@ st.write(
 )
 
 
-speech_tab, document_tab = st.tabs(
+speech_tab, document_tab, voice_rag_tab = st.tabs(
     [
         "🎙️ Speech Intelligence",
-        "📄 Document Intelligence"
+        "📄 Document Intelligence",
+        "🎙️📄 Ask PDF with Voice"
     ]
 )
 
@@ -445,8 +446,236 @@ with document_tab:
                             f"failed: {error}"
                         )
 
+# =================================================
+# VOICE + PDF RAG
+# =================================================
 
-st.divider()
+with voice_rag_tab:
+
+    st.header("🎙️📄 Ask Your PDF with Voice")
+
+    st.write(
+        """
+        Upload a PDF, then use speech as your question.
+
+        Whisper transcribes the spoken question.
+        The RAG pipeline searches the uploaded PDF,
+        reranks the evidence, and Qwen generates
+        a grounded answer.
+        """
+    )
+
+    # =============================================
+    # PDF
+    # =============================================
+
+    voice_pdf = st.file_uploader(
+        "Upload PDF",
+        type=["pdf"],
+        key="voice_pdf"
+    )
+
+    if voice_pdf is not None:
+
+        st.write(f"📄 {voice_pdf.name}")
+
+        if st.button(
+            "Process PDF for Voice Assistant",
+            type="primary"
+        ):
+
+            try:
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=".pdf"
+                ) as temp:
+
+                    temp.write(
+                        voice_pdf.getbuffer()
+                    )
+
+                    pdf_path = temp.name
+
+                st.info("Processing PDF...")
+
+                from rag import build_knowledge_base
+
+                with st.spinner(
+                    "Creating document knowledge base..."
+                ):
+
+                    knowledge_base = build_knowledge_base(
+                        pdf_path
+                    )
+
+                knowledge_base["source"] = voice_pdf.name
+
+                st.session_state[
+                    "voice_knowledge_base"
+                ] = knowledge_base
+
+                st.success(
+                    f"✅ {voice_pdf.name} ready!"
+                )
+
+                st.write(
+                    f"{len(knowledge_base['chunks'])} "
+                    f"document chunks created."
+                )
+
+            except Exception as error:
+
+                st.error("PDF processing failed.")
+
+                st.exception(error)
+
+
+    # =============================================
+    # VOICE QUESTION
+    # =============================================
+
+    if "voice_knowledge_base" in st.session_state:
+
+        knowledge_base = st.session_state[
+            "voice_knowledge_base"
+        ]
+
+        st.divider()
+
+        st.success(
+            f"Active document: "
+            f"{knowledge_base['source']}"
+        )
+
+        st.subheader("🎙️ Spoken Question")
+
+        test_audio_path = (
+            PROJECT_ROOT
+            / "data"
+            / "test_audio.mp3"
+        )
+
+        if test_audio_path.exists():
+
+            st.audio(str(test_audio_path))
+
+            st.caption(
+                "Using data/test_audio.mp3"
+            )
+
+            if st.button(
+                "Ask PDF Using Test Audio"
+            ):
+
+                try:
+
+                    # Whisper
+                    from transcribe import transcribe_audio
+
+                    with st.spinner(
+                        "Transcribing speech..."
+                    ):
+
+                        spoken_question = transcribe_audio(
+                            str(test_audio_path)
+                        )
+
+                    st.subheader(
+                        "Whisper Transcription"
+                    )
+
+                    st.info(spoken_question)
+
+
+                    # RAG
+                    from rag import rag_answer
+
+                    with st.spinner(
+                        "Searching the PDF..."
+                    ):
+
+                        result = rag_answer(
+                            spoken_question,
+                            knowledge_base
+                        )
+
+
+                    st.subheader(
+                        "Grounded Answer"
+                    )
+
+                    st.success(
+                        result["answer"]
+                    )
+
+
+                    st.write(
+                        f"📄 Source: "
+                        f"{result['source']}"
+                    )
+
+
+                    with st.expander(
+                        "View retrieved evidence"
+                    ):
+
+                        st.write(
+                            result["context"]
+                        )
+
+
+                    with st.expander(
+                        "View retrieval scores"
+                    ):
+
+                        for i, item in enumerate(
+                            result["results"],
+                            1
+                        ):
+
+                            st.write(
+                                f"**Result {i}**"
+                            )
+
+                            st.write(
+                                "Similarity:",
+                                round(
+                                    item["score"],
+                                    4
+                                )
+                            )
+
+                            st.write(
+                                "Reranker:",
+                                round(
+                                    item["rerank_score"],
+                                    4
+                                )
+                            )
+
+                            st.write(
+                                item["text"]
+                            )
+
+                            st.divider()
+
+                except Exception as error:
+
+                    st.error(
+                        "Voice RAG failed."
+                    )
+
+                    st.exception(error)
+
+        else:
+
+            st.error(
+                "data/test_audio.mp3 was not found."
+            )
+
+     
+                  
 
 st.caption(
     "Whisper • WavLM • Qwen • "
