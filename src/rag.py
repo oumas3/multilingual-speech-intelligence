@@ -2,10 +2,18 @@ from pathlib import Path
 import re
 
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer, CrossEncoder, util
+from sentence_transformers import (
+    SentenceTransformer,
+    CrossEncoder,
+    util,
+)
 
 from llm import answer_with_context
 
+
+# =================================================
+# MODELS
+# =================================================
 
 print("Loading RAG models...")
 
@@ -19,6 +27,10 @@ reranker = CrossEncoder(
 
 print("RAG models loaded!")
 
+
+# =================================================
+# PDF TEXT EXTRACTION
+# =================================================
 
 def extract_pdf_text(pdf_path):
     reader = PdfReader(str(pdf_path))
@@ -46,6 +58,10 @@ def extract_pdf_text(pdf_path):
 
     return document_text
 
+
+# =================================================
+# CHUNKING
+# =================================================
 
 def create_chunks(
     text,
@@ -89,6 +105,10 @@ def create_chunks(
     return chunks
 
 
+# =================================================
+# KNOWLEDGE BASE
+# =================================================
+
 def build_knowledge_base(pdf_path):
     text = extract_pdf_text(pdf_path)
 
@@ -111,6 +131,10 @@ def build_knowledge_base(pdf_path):
         "source": Path(pdf_path).name
     }
 
+
+# =================================================
+# RETRIEVAL
+# =================================================
 
 def retrieve_chunks(
     question,
@@ -155,6 +179,10 @@ def retrieve_chunks(
     return retrieved
 
 
+# =================================================
+# RERANKING
+# =================================================
+
 def rerank_chunks(
     question,
     retrieved
@@ -182,6 +210,10 @@ def rerank_chunks(
     )
 
 
+# =================================================
+# RAG QUESTION ANSWERING
+# =================================================
+
 def rag_answer(
     question,
     knowledge_base
@@ -191,61 +223,44 @@ def rag_answer(
             "Question cannot be empty."
         )
 
+    # Step 1: Semantic retrieval
     retrieved = retrieve_chunks(
         question,
         knowledge_base
     )
 
+    # Step 2: CrossEncoder reranking
     reranked = rerank_chunks(
         question,
         retrieved
     )
 
-   best_results = reranked[:2]
+    # Step 3: Keep strongest evidence
+    best_results = reranked[:2]
 
-# Reject questions that are not relevant to the document
-if (
-    not best_results
-    or best_results[0]["score"] < 0.25
-):
-    return {
-        "question": question,
-        "answer": (
-            "I cannot answer this question "
-            "based on the provided document."
-        ),
-        "context": "",
-        "source": knowledge_base["source"],
-        "results": best_results
-    }
+    # Step 4: Reject unrelated questions
+    if (
+        not best_results
+        or best_results[0]["score"] < 0.25
+    ):
+        return {
+            "question": question,
+            "answer": (
+                "I cannot answer this question "
+                "based on the provided document."
+            ),
+            "context": "",
+            "source": knowledge_base["source"],
+            "results": best_results
+        }
 
-context = "\n\n".join(
-    item["text"]
-    for item in best_results
-)
-
-answer = answer_with_context(
-    question,
-    context
-)
-
-return {
-    "question": question,
-    "answer": answer,
-    "context": context,
-    "source": knowledge_base["source"],
-    "results": best_results
-}
-    if not best_results:
-        raise ValueError(
-            "No relevant context was found."
-        )
-
+    # Step 5: Build grounded context
     context = "\n\n".join(
         item["text"]
         for item in best_results
     )
 
+    # Step 6: Generate answer using Qwen
     answer = answer_with_context(
         question,
         context
