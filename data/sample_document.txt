@@ -1,0 +1,7 @@
+Whisper is a speech recognition model developed by OpenAI. It can transcribe audio into text and supports multiple languages.
+
+WavLM is a speech representation model. It can learn useful audio features for tasks such as speaker recognition and speech classification.
+
+RAG stands for Retrieval-Augmented Generation. It retrieves relevant information from external documents before an LLM generates an answer.
+
+Vector databases store embeddings. Embeddings are numerical representations of meaning that allow semantically similar pieces of text to be found.

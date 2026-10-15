@@ -1,6 +1,50 @@
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Python
 __pycache__/
-*.pyc
-.env
-data/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE / Editor
 .vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables / secrets
+.env
+.env.*
+*.env
+
+# Hugging Face / model caches
+.cache/
+huggingface/
+models/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Local generated outputs
+outputs/
