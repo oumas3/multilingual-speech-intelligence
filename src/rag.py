@@ -229,19 +229,16 @@ def rag_answer(
         knowledge_base
     )
 
-    # Step 2: CrossEncoder reranking
-    reranked = rerank_chunks(
-        question,
-        retrieved
-    )
+    # Step 2: Relevance check based on
+    # the strongest cosine similarity
+    top_similarity = max(
+        item["score"]
+        for item in retrieved
+    ) if retrieved else 0.0
 
-    # Step 3: Keep strongest evidence
-    best_results = reranked[:2]
-
-    # Step 4: Reject unrelated questions
     if (
-        not best_results
-        or best_results[0]["score"] < 0.25
+        not retrieved
+        or top_similarity < 0.25
     ):
         return {
             "question": question,
@@ -251,8 +248,37 @@ def rag_answer(
             ),
             "context": "",
             "source": knowledge_base["source"],
-            "results": best_results
+            "results": retrieved[:2]
         }
+
+    # Step 3: CrossEncoder reranking
+    reranked = rerank_chunks(
+        question,
+        retrieved
+    )
+
+    # Step 4: Keep strongest evidence
+    best_results = reranked[:2]
+
+    # Step 5: Build grounded context
+    context = "\n\n".join(
+        item["text"]
+        for item in best_results
+    )
+
+    # Step 6: Generate grounded answer
+    answer = answer_with_context(
+        question,
+        context
+    )
+
+    return {
+        "question": question,
+        "answer": answer,
+        "context": context,
+        "source": knowledge_base["source"],
+        "results": best_results
+    }
 
     # Step 5: Build grounded context
     context = "\n\n".join(
