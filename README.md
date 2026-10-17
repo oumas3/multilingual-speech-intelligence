@@ -494,7 +494,7 @@ multilingual-speech-intelligence/
 ### 1. Clone the Repository
 
 ```bash
-git clone <YOUR-GITHUB-REPOSITORY-URL>
+git clone https://github.com/oumas3/multilingual-speech-intelligence.git
 cd multilingual-speech-intelligence
 ```
 
