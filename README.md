@@ -504,7 +504,7 @@ Windows:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 ```
 
 Linux/macOS:
